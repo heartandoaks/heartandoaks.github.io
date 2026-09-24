@@ -1,0 +1,9 @@
+{
+  "name": "Heart & Oaks Business Manager",
+  "short_name": "Heart & Oaks",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f8f7",
+  "theme_color": "#2f5f4a",
+  "description": "Heart & Oaks client, scheduling, mileage, billing, taxes, receipts, and contracts manager."
+}
