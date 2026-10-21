@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Heart & Oaks — Shared Team Schedule</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#23312a;background:#f6f8f7}
+*{box-sizing:border-box}body{margin:0}header{background:#2f5f4a;color:white;padding:19px 16px}header h1{font-size:21px;margin:0 0 5px}header p{margin:0;font-size:13px}
+main{max-width:850px;margin:auto;padding:18px}.card{background:#fff;border:1px solid #d8e0db;border-radius:14px;padding:17px;margin:0 0 15px}
+h2{font-size:18px;margin:0 0 12px}p{line-height:1.5}.small{font-size:13px;color:#5c6b61}.tag{background:#fff0c9;color:#5d4715;padding:5px 9px;border-radius:18px;font-size:12px;font-weight:700}
+label{display:block;font-weight:650;font-size:13px;margin:13px 0 5px}input,select{width:100%;border:1px solid #c5d2c8;border-radius:8px;padding:12px;font-size:16px;background:white;color:#23312a}
+button{background:#2f5f4a;color:white;border:0;border-radius:9px;padding:12px 15px;font-weight:700;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}.outline{border:1px solid #2f5f4a;background:white;color:#2f5f4a}.danger{color:#923030;border-color:#923030}
+[hidden]{display:none!important}.row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.fields{display:grid;grid-template-columns:repeat(2,1fr);gap:0 13px}
+@media(max-width:620px){.fields{grid-template-columns:1fr}}
+.message{font-size:14px;margin:12px 0;min-height:18px;overflow-wrap:anywhere}.message.error{color:#ad2222}.message.good{color:#246b43}
+.item{border-top:1px solid #d8e0db;padding:12px 0}.item strong{display:block;font-size:15px}.item div{font-size:13px;margin-top:4px;color:#4e6054}.item button{margin-top:9px;padding:7px 10px;font-size:12px}
+a{color:#2f5f4a}
+</style>
+</head>
+<body>
+<header><h1>Heart & Oaks • Shared Team Schedule</h1><p>Appointment scheduling <span class="tag">TEST VERSION</span></p></header>
+<main>
+<div class="card small"><strong>Private scheduling preview.</strong> This page is for testing separate staff accounts. Use a made-up client name, not real client information. This schedule does <strong>not yet sync with the appointments in your original Business Manager</strong>, and it does not display billing, rates, taxes, or receipts. Staff access is enforced by Firebase security rules once configured.</div>
+<section class="card" id="loginSection">
+<h2>Sign in to shared scheduling</h2>
+<p class="small">Use your individual Heart & Oaks Firebase email and password. A new employee account must also be approved by the owner before it can view or add appointments.</p>
+<form id="loginForm">
+<label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+<p><button id="loginButton" type="submit">Sign in</button></p>
+</form>
+<p class="message" id="loginMessage" role="status" aria-live="polite"></p>
+</section>
+<section id="scheduleSection" hidden>
+<div class="card row"><div><strong>Signed in as <span id="who"></span></strong><p class="small" style="margin:5px 0 0">Role: <span id="role"></span>. Appointment changes sync between devices.</p></div><button class="outline" type="button" id="logoutButton">Sign out</button></div>
+<div class="card"><h2>Add a test appointment</h2>
+<form id="appointmentForm"><div class="fields">
+<div><label for="client">Client (use TEST Client)</label><input id="client" type="text" maxlength="80" placeholder="TEST Client" required></div>
+<div><label for="service">Service</label><select id="service"><option>Organizing</option><option>Cleaning</option><option>Caregiving</option><option>Other</option></select></div>
+<div><label for="date">Date</label><input id="date" type="date" required></div>
+<div><label for="time">Start time</label><input id="time" type="time" required></div>
+<div><label for="duration">Duration in hours</label><input id="duration" type="number" min="0.25" max="48" step="0.25" value="2" required></div>
+<div><label for="staff">Assigned employee (optional)</label><input id="staff" type="text" maxlength="80"></div>
+</div><p><button id="addButton" type="submit">Add test appointment</button></p></form>
+<p class="message" id="scheduleMessage" role="status" aria-live="polite"></p></div>
+<div class="card"><div class="row"><h2>Shared appointments</h2><span class="small" id="count">Loading...</span></div><div id="appointments" aria-live="polite"></div></div>
+<div class="card" id="ownerTools" hidden>
+<h2>Owner only • Approve scheduling employees</h2>
+<p class="small">First create the employee's separate account under <strong>Firebase → Authentication → Users → Add user</strong>. Copy the employee's <strong>User UID</strong> (not their password) and paste it here. Approved employees can view every appointment and add new ones, but cannot delete, see billing, or approve others.</p>
+<form id="approveForm">
+<label for="staffUID">Employee User UID</label><input id="staffUID" type="text" autocomplete="off" spellcheck="false" maxlength="128" required>
+<label for="staffName">Employee name (optional)</label><input id="staffName" type="text" maxlength="80">
+<p><button type="submit" id="approveButton">Approve employee</button></p>
+</form>
+<p id="approvalMessage" class="message" role="status" aria-live="polite"></p>
+<h3>Approved employees</h3><div id="approvedStaff" class="small"></div>
+</div>
+
+</section>
+<p class="small">For testing only. Do not share sensitive information until employee rules and logins have been verified. This project is not a backup of your original Business Manager.</p>
+</main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+import {getFirestore,collection,addDoc,deleteDoc,doc,getDoc,setDoc,updateDoc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const firebaseConfig={
+ apiKey:"AIzaSyA9DgZZ0rep8QpvORYTPjL5B_75ejT18QQ",
+ authDomain:"h-and-o-business-manager.firebaseapp.com",
+ projectId:"h-and-o-business-manager",
+ storageBucket:"h-and-o-business-manager.firebasestorage.app",
+ messagingSenderId:"375639631935",
+ appId:"1:375639631935:web:eb16f05b20a2e5caaff08a"
+};
+const OWNER_UID="L6sMmdN6uUcTJoVV7ALSN6wtQ6i1";
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id);
+let stopListening=null,stopStaffListening=null,activeUser=null,sessionCounter=0;
+function message(id,text,isError=false){const el=$(id);el.textContent=text;el.className="message "+(isError?"error":"good");}
+function setSignedIn(show){$("loginSection").hidden=show;$("scheduleSection").hidden=!show;}
+function addField(parent,tag,txt,cls){const e=document.createElement(tag);e.textContent=txt;if(cls)e.className=cls;parent.appendChild(e);return e;}
+function showItems(snapshot){
+ const box=$("appointments");box.replaceChildren();
+ const rows=snapshot.docs.map(d=>({id:d.id,...d.data()}));
+ rows.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.time||"").localeCompare(String(b.time||"")));
+ $("count").textContent=rows.length+" appointment(s)";
+ if(!rows.length){addField(box,"p","No test appointments yet.","small");return;}
+ for(const a of rows){
+  const item=addField(box,"div","","item");
+  addField(item,"strong",(a.date||"")+" at "+(a.time||"")+" — "+(a.client||""));
+  addField(item,"div",(a.service||"")+" • "+String(a.duration||"")+" hours"+(a.staff?" • Assigned: "+a.staff:""));
+  if(activeUser && activeUser.uid===OWNER_UID){
+   const b=addField(item,"button","Delete test appointment","outline danger");b.type="button";
+   b.addEventListener("click",async()=>{
+    if(!confirm("Delete this TEST appointment?"))return;
+    b.disabled=true;
+    try{await deleteDoc(doc(db,"managerTestAppointments",a.id));message("scheduleMessage","Test appointment deleted.");}
+    catch(e){message("scheduleMessage","Unable to delete: "+e.message,true);b.disabled=false;}
+   });
+  }
+ }
+}
+function showApprovedStaff(snapshot){
+ const box=$("approvedStaff");box.replaceChildren();
+ const staff=snapshot.docs.filter(d=>d.data().active===true);
+ if(!staff.length){addField(box,"p","No employees approved yet.");return;}
+ for(const d of staff){
+  const row=addField(box,"div","","item");
+  addField(row,"strong",d.data().displayName||"Scheduling employee");
+  addField(row,"div","UID: "+d.id);
+  const revoke=addField(row,"button","Revoke scheduling access","outline danger");
+  revoke.type="button";
+  revoke.addEventListener("click",async()=>{
+   if(!confirm("Revoke this employee's scheduling access?"))return;
+   revoke.disabled=true;
+   try{await updateDoc(doc(db,"schedulingStaff",d.id),{active:false});message("approvalMessage","Employee access revoked.");}
+   catch(e){message("approvalMessage","Could not revoke access: "+e.message,true);revoke.disabled=false;}
+  });
+ }
+}
+$("approveForm").addEventListener("submit",async e=>{
+ e.preventDefault();if(!activeUser || activeUser.uid!==OWNER_UID)return;
+ const id=$("staffUID").value.trim(),name=$("staffName").value.trim();
+ if(!/^[A-Za-z0-9]{10,128}$/.test(id) || id===OWNER_UID){message("approvalMessage","Please enter a valid employee User UID from Firebase Authentication.",true);return;}
+ const b=$("approveButton");b.disabled=true;
+ try{
+  await setDoc(doc(db,"schedulingStaff",id),{active:true,displayName:name,approvedAt:serverTimestamp(),approvedBy:activeUser.uid});
+  message("approvalMessage","Employee approved. They can now sign in with their own email/password.");$("approveForm").reset();
+ }catch(err){message("approvalMessage","Unable to approve employee: "+err.message,true);}
+ finally{b.disabled=false;}
+});
+async function verifyApproved(user){
+ if(user.uid===OWNER_UID)return "Owner";
+ const record=await getDoc(doc(db,"schedulingStaff",user.uid));
+ if(!record.exists()||record.data().active!==true)throw new Error("Your account has not yet been approved for scheduling. Ask the owner to approve your account.");
+ return "Scheduling employee";
+}
+onAuthStateChanged(auth,async user=>{
+ const session=++sessionCounter;
+ if(stopListening){stopListening();stopListening=null;}
+ if(stopStaffListening){stopStaffListening();stopStaffListening=null;}
+ $("ownerTools").hidden=true;
+ activeUser=null;
+ setSignedIn(false);
+ if(!user){$("password").value="";$("count").textContent="";$("appointments").replaceChildren();return;}
+ message("loginMessage","Checking scheduling access...");
+ try{
+  const role=await verifyApproved(user);
+  if(session!==sessionCounter)return;
+  activeUser=user;
+  $("who").textContent=user.email||"user";$("role").textContent=role;
+  $("password").value="";
+  message("loginMessage","");setSignedIn(true);
+  if(user.uid===OWNER_UID){
+   $("ownerTools").hidden=false;
+   stopStaffListening=onSnapshot(collection(db,"schedulingStaff"),showApprovedStaff,e=>message("approvalMessage","Unable to load approved employees: "+e.message,true));
+  }
+  message("scheduleMessage","Signed in. Connecting to the shared schedule...");
+  stopListening=onSnapshot(collection(db,"managerTestAppointments"),snap=>{
+   if(session!==sessionCounter)return;
+   showItems(snap);message("scheduleMessage","Schedule is connected and up to date.");
+  },e=>{if(session!==sessionCounter)return;$("count").textContent="Unable to sync";message("scheduleMessage","Database access failed: "+e.message,true);});
+ }catch(e){if(session!==sessionCounter)return;message("loginMessage","Cannot open schedule: "+e.message,true);await signOut(auth);}
+});
+$("loginForm").addEventListener("submit",async e=>{
+ e.preventDefault();const b=$("loginButton");b.disabled=true;message("loginMessage","Signing in...");
+ try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);}
+ catch(e){message("loginMessage","Could not sign in. Check email/password and try again. ("+e.code+")",true);}
+ finally{b.disabled=false;}
+});
+$("logoutButton").addEventListener("click",async()=>{await signOut(auth);message("loginMessage","Signed out.");});
+$("appointmentForm").addEventListener("submit",async e=>{
+ e.preventDefault();if(!activeUser)return;
+ const b=$("addButton");b.disabled=true;
+ try{
+  const name=$("client").value.trim(),duration=Number($("duration").value);
+  if(!name||!Number.isFinite(duration)||duration<0.25||duration>48)throw new Error("Check client name and duration.");
+  await addDoc(collection(db,"managerTestAppointments"),{
+   client:name,service:$("service").value,date:$("date").value,
+   time:$("time").value,duration,staff:$("staff").value.trim(),createdBy:activeUser.uid,createdAt:serverTimestamp()
+  });
+  $("appointmentForm").reset();$("duration").value="2";
+  message("scheduleMessage","Test appointment saved online. Other approved accounts should see it automatically.");
+ }catch(err){message("scheduleMessage","Could not save: "+err.message,true);}
+ finally{b.disabled=false;}
+});
+$("date").value=new Date().toLocaleDateString("en-CA");
+</script>
+</body>
+</html>
